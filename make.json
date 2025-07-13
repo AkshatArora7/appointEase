@@ -1,0 +1,96 @@
+{
+  "scenario": {
+    "name": "Stability AI Image Generation",
+    "description": "Generate images from text prompts using Stability AI",
+    "modules": [
+      {
+        "type": "trigger",
+        "module": "webhook",
+        "config": {
+          "url": "https://hook.make.com/your-unique-webhook-id",
+          "method": "POST",
+          "payload": {
+            "prompt": "A futuristic cityscape at sunset",
+            "width": 1024,
+            "height": 576,
+            "cfg_scale": 7,
+            "steps": 30,
+            "style_preset": "cinematic"
+          }
+        }
+      },
+      {
+        "type": "action",
+        "module": "http",
+        "config": {
+          "method": "POST",
+          "url": "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+          "headers": {
+            "Authorization": "Bearer {{env('STABILITY_API_KEY')}}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          "body": {
+            "text_prompts": [
+              {
+                "text": "{{input.prompt}}",
+                "weight": 1
+              }
+            ],
+            "cfg_scale": "{{input.cfg_scale || 7}}",
+            "height": "{{input.height || 1024}}",
+            "width": "{{input.width || 1024}}",
+            "steps": "{{input.steps || 30}}",
+            "style_preset": "{{input.style_preset || 'none'}}",
+            "samples": 1
+          }
+        },
+        "error_handling": {
+          "strategy": "set_error_message"
+        }
+      },
+      {
+        "type": "action",
+        "module": "tools",
+        "config": {
+          "function": "base64_to_file",
+          "input": "{{body.artifacts[0].base64}}",
+          "filename": "generated-image-{{formatDate(now; 'YYYYMMDD-HHmmss')}}.png"
+        }
+      },
+      {
+        "type": "action",
+        "module": "google_drive",
+        "config": {
+          "connection": "your_google_drive_connection_id",
+          "action": "upload_file",
+          "folder": "your_folder_id",
+          "file": "{{output.file}}",
+          "filename": "{{output.filename}}"
+        }
+      },
+      {
+        "type": "action",
+        "module": "slack",
+        "config": {
+          "connection": "your_slack_connection_id",
+          "channel": "design-team",
+          "text": "New image generated: {{output.filename}}",
+          "attachments": [
+            {
+              "title": "View in Google Drive",
+              "title_link": "{{output.downloadUrl}}"
+            }
+          ]
+        }
+      }
+    ],
+    "error_handler": {
+      "module": "slack",
+      "config": {
+        "channel": "dev-alerts",
+        "text": "🚨 Stability AI Error:\n```{{error.message}}```\n**Request ID**: {{error.requestId}}"
+      }
+    }
+  }
+}
